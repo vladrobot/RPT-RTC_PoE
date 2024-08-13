@@ -1,0 +1,11 @@
+[Unit]
+Description=Rpi4-RTC-PoE Daliserver (pigpiod)
+After=pigpiod.target
+
+[Service]
+Type=idle
+Restart=on-failure
+User=root
+ExecStart=/usr/bin/python3 /opt/rpi4daliserver/rpi4daliserver.py
+[Install]
+WantedBy=multi-user.target
