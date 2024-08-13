@@ -1,4 +1,4 @@
-# Ver: 2.1_no_thread
+# Ver: 2.1_1no_thread
 import signal
 import sys
 import socket
@@ -27,7 +27,9 @@ BIT_TIMING_MIN = 749990 / 1000 # 749.99 uS
 BIT_TIMING_NOR = 416    # 416.00 uS
 BIT_TIMING_MAX = 916660 / 1000 # 916.66 uS
 
-TIME_OUT_IDLE = int((2 * BIT_TIMING_MIN)/1000) # mS
+TIME_OUT_IDLE = 2 # mS
+EDGES_FOR_STOP = 4
+DALI_ANSWER_DELAY = 0.025 # in sec
 
 TRANSMITTING = False
 DALI_ANSWER_DELAY = 0.02 # in sec
@@ -75,8 +77,9 @@ def tx_to_tcp(buffer,status):
 	    logging.debug('\x1b[32;20m No connection\x1b[0m')
 	    return
     else:
-	    conn.close()
 	    logging.debug(f"[CONNECTION] Disconnected from {addr}")
+	    conn.close()
+
 
 def answer_delay():
     tx_to_tcp([],'No Data')
@@ -154,7 +157,6 @@ def cbf_pigpio(gpio, level, current_edge_tick):
 
     delta_edge_tick = current_edge_tick - previous_edge_tick
     current_edge_level = (0 if level==1 else 1)
-
     if level == 2:
 	    pi.set_watchdog(GPIO_RX_LINE, 0) # Stop WatchDog
 	    buff_len = len(DALI_BUFFER_IN)
@@ -179,11 +181,10 @@ def cbf_pigpio(gpio, level, current_edge_tick):
 	    return
 
     if BIT_TIMING_MIN <= delta_edge_tick <= BIT_TIMING_MAX:
-	    count_edge += 2	# if bit 1->0 or 0->1
-    else:
-	    count_edge += 1	# if bit 1->1 or 0->0
+	    count_edge += 1	# if bit 1->0 or 0->1
+    count_edge += 1		# if bit 1->1 or 0->0
 
-    if TRANSMITTING and count_edge >= 4:	#stop timeout for answer
+    if TRANSMITTING and count_edge >= EDGES_FOR_STOP:	#stop timeout for answer
 	    timeout_dali('Stop')
 
     if count_edge > 2 and (count_edge % 2) == 0:
@@ -191,7 +192,7 @@ def cbf_pigpio(gpio, level, current_edge_tick):
 		    out += '1'
 	    else:
 		    out += '0'
-	    if (count_edge - 2) % 16 == 0:
+	    if len(out) == 8:
 		    DALI_BUFFER_IN.append(int(out,2))
 		    out = ''
     previous_edge_tick = current_edge_tick
@@ -232,7 +233,11 @@ if __name__ == "__main__":
 	    while True:
 		    conn, addr =  s.accept()
 		    logging.debug(f"[CONNECTION] Connected from {addr}")
-		    data = conn.recv(4)
-		    if not data:
-			    break
-		    rx_from_tcp(data)
+		    try:
+			    data = conn.recv(4)
+			    if not data:
+				    break
+			    rx_from_tcp(data)
+		    except:
+			    logging.debug('\x1b[32;20m No connection to client\x1b[0m')
+			    pass
